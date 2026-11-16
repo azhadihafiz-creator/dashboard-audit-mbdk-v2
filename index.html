@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Tindakan Maklumbalas Mesyuarat Penutup Audit - MBDK</title>
+  <link rel="icon" type="image/png" href="logo-mbdk.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
+    .mbdk-red { background-color: #991b1b; }
+    .mbdk-gold { border-color: #d97706; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- KONFIGURASI GOOGLE APPS SCRIPT -->
+  <script>
+    // URL Web App Google Apps Script anda (Boleh tukar jika buat deployment baharu)
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbySKbxkRuRcINT2IDAnXjgK8MvtwVXD-9oVttB4qxlVJd5Z9851KxaSjnznqzSIXn4e/exec";
+  </script>
+
+  <!-- HEADER KORPORAT MBDK -->
+  <header class="mbdk-red text-white shadow-lg border-b-4 mbdk-gold">
+    <div class="max-w-7xl mx-auto px-4 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3.5">
+        <div class="bg-slate-950 p-1.5 rounded-xl shadow-md border border-amber-400/60 flex-shrink-0">
+          <img src="logo-mbdk.png" alt="Logo Rasmi MBDK" class="w-12 h-14 object-contain rounded" />
+        </div>
+        <div>
+          <h1 class="text-base md:text-xl font-bold tracking-wide leading-snug">DASHBOARD TINDAKAN MAKLUMBALAS MESYUARAT PENUTUP AUDIT</h1>
+          <p class="text-xs text-amber-200 font-medium">Bahagian Audit Dalam • Majlis Bandaraya Diraja Klang (MBDK)</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span id="syncStatus" class="text-xs bg-red-950/80 px-3 py-1.5 rounded-full border border-red-700 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Menyambung Pangkalan Data...
+        </span>
+        <button onclick="loadFromSheets()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1 shadow transition">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Muat Semula Data
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- BAR KAWALAN PERANAN & BULAN -->
+  <div class="bg-white border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="text-xs font-bold text-slate-600">BULAN:</label>
+        <select id="filterMonth" onchange="renderDashboard()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-medium bg-white">
+          <option value="Januari">Januari</option><option value="Februari">Februari</option>
+          <option value="Mac">Mac</option><option value="April">April</option>
+          <option value="Mei">Mei</option><option value="Jun">Jun</option>
+          <option value="Julai">Julai</option><option value="Ogos">Ogos</option>
+          <option value="September">September</option><option value="Oktober">Oktober</option>
+          <option value="November" selected>November</option><option value="Disember">Disember</option>
+        </select>
+
+        <label class="text-xs font-bold text-slate-600 ml-1">JABATAN:</label>
+        <select id="filterDept" onchange="renderDashboard()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-medium max-w-xs bg-white">
+          <option value="ALL">Semua Jabatan (20 Jabatan MBDK)</option>
+        </select>
+      </div>
+
+      <div id="adminControls" class="flex flex-wrap items-center gap-2">
+        <button onclick="copyPreviousMonth()" class="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 transition">
+          <i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin Bulan Sebelum
+        </button>
+        <button onclick="openShareModal()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 transition">
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Kongsi Pautan Jabatan
+        </button>
+        <button onclick="openNewFindingModal()" class="bg-red-800 hover:bg-red-900 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow transition">
+          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Tambah Arahan Pengerusi Mesyuarat
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KANDUNGAN UTAMA -->
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+    <!-- KAD STATISTIK LAMPU ISYARAT -->
+    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-xs font-bold text-slate-500 uppercase">Jumlah Arahan</p>
+        <p id="statTotal" class="text-2xl font-extrabold text-slate-800 mt-1">0</p>
+      </div>
+      <div class="bg-red-50 p-4 rounded-xl border border-red-200 shadow-sm">
+        <p class="text-xs font-bold text-red-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-600"></span> Merah (Belum Laksana)</p>
+        <p id="statRed" class="text-2xl font-extrabold text-red-700 mt-1">0</p>
+      </div>
+      <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 shadow-sm">
+        <p class="text-xs font-bold text-amber-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Kuning (Dalam Pelaksanaan)</p>
+        <p id="statYellow" class="text-2xl font-extrabold text-amber-700 mt-1">0</p>
+      </div>
+      <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 shadow-sm">
+        <p class="text-xs font-bold text-emerald-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-600"></span> Hijau (Selesai Dilaksana)</p>
+        <p id="statGreen" class="text-2xl font-extrabold text-emerald-700 mt-1">0</p>
+      </div>
+    </div>
+
+    <!-- SENARAI PENEMUAN & ARAHAN -->
+    <div id="recordsContainer" class="space-y-4"></div>
+  </main>
+
+  <!-- FOOTER RASMI -->
+  <footer class="bg-slate-900 text-slate-400 text-xs py-4 text-center border-t border-slate-800 mt-10">
+    Hak Cipta Terpelihara © 2026 • Aplikasi Dibangunkan & Dimiliki Oleh <strong class="text-white">Bahagian Audit Dalam, Majlis Bandaraya Diraja Klang (MBDK)</strong>
+  </footer>
+
+  <!-- MODAL TAMBAH / KEMASKINI REKOD -->
+  <div id="recordModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h2 id="modalTitle" class="text-lg font-bold text-red-900">Kemaskini Maklumbalas Audit</h2>
+        <button onclick="closeModal('recordModal')" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <input type="hidden" id="editId" />
+
+      <!-- BAHAGIAN 1: URUSETIA -->
+      <div class="bg-red-50/60 p-4 rounded-xl border border-red-200 space-y-3">
+        <h3 class="text-xs font-bold uppercase text-red-800">Bahagian 1: Kawalan Urusetia (Penemuan & Arahan Pengerusi)</h3>
+        <div>
+          <label class="block text-xs font-semibold mb-1">Pilih Jabatan Terlibat (20 Jabatan MBDK)</label>
+          <div id="deptCheckboxes" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto bg-white p-2.5 rounded-lg border text-xs"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1">Penemuan Audit</label>
+          <textarea id="inpFinding" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1">Arahan Pengerusi Mesyuarat</label>
+          <textarea id="inpDirective" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+        </div>
+      </div>
+
+      <!-- BAHAGIAN 2, 3, 4: JABATAN -->
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+        <h3 class="text-xs font-bold uppercase text-slate-700">Bahagian 2 - 4: Maklumbalas & Bukti Jabatan</h3>
+        <div>
+          <label class="block text-xs font-semibold mb-1">2. Justifikasi Jabatan (Perkara Sebenar Berlaku)</label>
+          <textarea id="inpJustification" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1">3. Penambahbaikan Dibuat (Perancangan / ISO)</label>
+          <textarea id="inpImprovement" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+          <input type="file" id="filePart3" accept=".pdf,image/*" class="mt-1.5 text-xs" onchange="uploadEvidence(this, 'filesPart3')" />
+          <div id="listFilesPart3" class="text-xs text-blue-700 mt-1 space-y-1"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1">4. Tindakan Penambahbaikan (Borang Baharu / Pelaksanaan)</label>
+          <textarea id="inpActionTaken" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+          <input type="file" id="filePart4" accept=".pdf,image/*" class="mt-1.5 text-xs" onchange="uploadEvidence(this, 'filesPart4')" />
+          <div id="listFilesPart4" class="text-xs text-blue-700 mt-1 space-y-1"></div>
+        </div>
+      </div>
+
+      <!-- BAHAGIAN 5: TAPISAN & LAMPU ISYARAT URUSETIA -->
+      <div id="adminReviewSection" class="bg-amber-50 p-4 rounded-xl border border-amber-200 space-y-3">
+        <h3 class="text-xs font-bold uppercase text-amber-900">Bahagian 5: Penilaian Impak, Tapisan & Lampu Isyarat (Urusetia Sahaja)</h3>
+        <div>
+          <label class="block text-xs font-semibold mb-1">Impak Tindakan Penambahbaikan</label>
+          <textarea id="inpImpact" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold mb-1">Status Lampu Isyarat</label>
+            <select id="inpTraffic" class="w-full border rounded-lg p-2 text-sm font-semibold bg-white">
+              <option value="RED">🔴 MERAH - Belum Laksana</option>
+              <option value="YELLOW">🟡 KUNING - Dalam Pelaksanaan</option>
+              <option value="GREEN">🟢 HIJAU - Selesai Dilaksanakan</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold mb-1">Status Tapisan Urusetia</label>
+            <select id="inpApproval" class="w-full border rounded-lg p-2 text-sm font-semibold bg-white">
+              <option value="PENDING">Menunggu Semakan Urusetia</option>
+              <option value="APPROVED">Diluluskan (Papar Di Dashboard)</option>
+              <option value="REVISION">Dipulangkan Untuk Pindaan</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t">
+        <button onclick="closeModal('recordModal')" class="px-4 py-2 text-xs font-semibold bg-slate-200 rounded-lg">Batal</button>
+        <button onclick="saveRecord()" class="px-4 py-2 text-xs font-semibold bg-red-800 text-white rounded-lg hover:bg-red-900">Simpan Ke Google Sheet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL KONGSI PAUTAN JABATAN -->
+  <div id="shareModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <h2 class="text-base font-bold text-red-900">Jana Pautan Khas Jabatan MBDK</h2>
+      <div>
+        <label class="block text-xs font-semibold mb-1">Pilih Jabatan:</label>
+        <select id="shareDeptSelect" onchange="generateShareUrl()" class="w-full border rounded-lg p-2 text-sm bg-white"></select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold mb-1">Mod Akses Jabatan:</label>
+        <select id="shareAccessSelect" onchange="generateShareUrl()" class="w-full border rounded-lg p-2 text-sm bg-white">
+          <option value="draft">Isi Maklumbalas Sahaja (Perlu Tapisan Urusetia)</option>
+          <option value="view">Paparan Sahaja (Lihat Rekod Yang Telah Diluluskan)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold mb-1">Pautan Untuk Dihantar Ke Jabatan:</label>
+        <input id="generatedUrl" readonly class="w-full bg-slate-100 border rounded-lg p-2 text-xs font-mono" />
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeModal('shareModal')" class="px-3 py-1.5 text-xs bg-slate-200 rounded-lg">Tutup</button>
+        <button onclick="copyShareUrl()" class="px-3 py-1.5 text-xs bg-red-800 text-white rounded-lg">Salin Pautan</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MONTHS = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];
+    const DEPARTMENTS = [
+      "Jabatan Khidmat Pengurusan", "Jabatan Kewangan", "Jabatan Kejuruteraan",
+      "Jabatan Perancang Bandar", "Jabatan Bangunan", "Jabatan Penilaian dan Pengurusan Harta",
+      "Jabatan Undang-Undang", "Jabatan Kemasyarakatan", "Jabatan Penguatkuasa",
+      "Jabatan Pelesenan", "Jabatan Perkhidmatan Persekitaran", "Jabatan Landskap dan Rekreasi",
+      "Jabatan Komunikasi Korporat", "Jabatan Teknologi Maklumat", "Jabatan Kesihatan",
+      "Jabatan Pusat Setempat", "Jabatan Pesuruhjaya Bangunan", "Bahagian Ukur Bahan",
+      "Unit Integriti", "Bahagian Sekretariat"
+    ];
+
+    const params = new URLSearchParams(window.location.search);
+    const ROLE = params.get('role') || 'admin';
+    const TARGET_DEPT = params.get('dept') || '';
+    const ACCESS_MODE = params.get('access') || 'draft';
+
+    let allRecords = [];
+    let tempFilesPart3 = [];
+    let tempFilesPart4 = [];
+
+    function init() {
+      lucide.createIcons();
+      const filterDept = document.getElementById('filterDept');
+      const shareDept = document.getElementById('shareDeptSelect');
+      const checkboxes = document.getElementById('deptCheckboxes');
+
+      DEPARTMENTS.forEach(d => {
+        filterDept.innerHTML += `<option value="${d}">${d}</option>`;
+        shareDept.innerHTML += `<option value="${d}">${d}</option>`;
+        checkboxes.innerHTML += `<label class="flex items-center gap-1.5"><input type="checkbox" value="${d}" class="dept-cb"> <span>${d}</span></label>`;
+      });
+
+      if (ROLE === 'dept') {
+        document.getElementById('adminControls').classList.add('hidden');
+        if (TARGET_DEPT) {
+          filterDept.value = TARGET_DEPT;
+          filterDept.disabled = true;
+        }
+      }
+      loadFromSheets();
+    }
+
+    async function loadFromSheets() {
+      setStatus('Memuatkan data dari Google Sheet...', 'amber');
+      try {
+        const res = await fetch(GAS_WEB_APP_URL);
+        const data = await res.json();
+        if (data.status === 'success') {
+          allRecords = data.records || [];
+          renderDashboard();
+          setStatus('Bersambung ke Google Sheet', 'emerald');
+        }
+      } catch (e) {
+        setStatus('Gagal sambung Google Sheet (Semak URL)', 'red');
+      }
+    }
+
+    async function syncToSheets() {
+      setStatus('Menyimpan ke Google Sheet...', 'amber');
+      try {
+        await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'saveAll', records: allRecords })
+        });
+        setStatus('Data Disimpan ke Google Sheet', 'emerald');
+      } catch (e) {
+        setStatus('Ralat semasa menyimpan data', 'red');
+      }
+    }
+
+    function setStatus(text, color) {
+      const el = document.getElementById('syncStatus');
+      el.innerHTML = `<span class="w-2 h-2 rounded-full bg-${color}-400"></span> ${text}`;
+    }
+
+    function renderDashboard() {
+      const month = document.getElementById('filterMonth').value;
+      const dept = document.getElementById('filterDept').value;
+      const container = document.getElementById('recordsContainer');
+
+      let filtered = allRecords.filter(r => r.month === month);
+      if (dept !== 'ALL') filtered = filtered.filter(r => (r.departments || []).includes(dept));
+      if (ROLE === 'dept' && ACCESS_MODE === 'view') {
+        filtered = filtered.filter(r => r.approvalStatus === 'APPROVED');
+      }
+
+      document.getElementById('statTotal').innerText = filtered.length;
+      document.getElementById('statRed').innerText = filtered.filter(r => r.trafficLight === 'RED').length;
+      document.getElementById('statYellow').innerText = filtered.filter(r => r.trafficLight === 'YELLOW').length;
+      document.getElementById('statGreen').innerText = filtered.filter(r => r.trafficLight === 'GREEN').length;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="bg-white p-8 rounded-xl border text-center text-slate-500 text-sm">Tiada rekod arahan audit ditemui untuk tapisan semasa.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(r => {
+        const badge = r.trafficLight === 'GREEN' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                      r.trafficLight === 'YELLOW' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                      'bg-red-100 text-red-800 border-red-300';
+        const label = r.trafficLight === 'GREEN' ? '🟢 HIJAU (SELESAI)' :
+                      r.trafficLight === 'YELLOW' ? '🟡 KUNING (DALAM PELAKSANAAN)' : '🔴 MERAH (BELUM LAKSANA)';
+        const canEdit = ROLE === 'admin' || (ROLE === 'dept' && ACCESS_MODE === 'draft');
+
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <div class="flex flex-wrap justify-between items-start gap-2 border-b pb-3">
+              <div>
+                <div class="flex flex-wrap gap-1 mb-1">
+                  ${(r.departments || []).map(d => `<span class="bg-red-50 text-red-800 border border-red-200 text-[11px] font-semibold px-2 py-0.5 rounded">${d}</span>`).join('')}
+                </div>
+                <h3 class="font-bold text-slate-900 text-sm">${r.finding}</h3>
+                <p class="text-xs text-slate-600 mt-0.5"><strong>Arahan Pengerusi:</strong> ${r.directive}</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full border ${badge}">${label}</span>
+                ${canEdit ? `<button onclick="openEditModal('${r.id}')" class="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-slate-900">Kemaskini</button>` : ''}
+                ${ROLE === 'admin' ? `<button onclick="deleteRecord('${r.id}')" class="bg-red-100 text-red-700 text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-200">Padam</button>` : ''}
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div class="bg-slate-50 p-3 rounded-lg">
+                <p class="font-bold text-slate-700 mb-1">Justifikasi Jabatan</p>
+                <p class="text-slate-600">${r.justification || '-'}</p>
+              </div>
+              <div class="bg-slate-50 p-3 rounded-lg">
+                <p class="font-bold text-slate-700 mb-1">Penambahbaikan & Tindakan</p>
+                <p class="text-slate-600">${r.improvement || '-'} / ${r.actionTaken || '-'}</p>
+                <div class="mt-1 space-y-0.5">
+                  ${[...(r.filesPart3 || []), ...(r.filesPart4 || [])].map(f => `<a href="${f.url}" target="_blank" class="block text-blue-600 underline">📎 ${f.name}</a>`).join('')}
+                </div>
+              </div>
+              <div class="bg-amber-50/60 p-3 rounded-lg border border-amber-100">
+                <p class="font-bold text-amber-900 mb-1">Penilaian Impak Urusetia</p>
+                <p class="text-slate-700">${r.impact || 'Belum dinilai'}</p>
+                <p class="mt-1 text-[11px] font-semibold text-slate-500">Status Tapisan: ${r.approvalStatus || 'PENDING'}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function copyPreviousMonth() {
+      const currentMonth = document.getElementById('filterMonth').value;
+      const idx = MONTHS.indexOf(currentMonth);
+      if (idx <= 0) {
+        alert('Bulan Januari tiada bulan sebelumnya dalam tahun ini.');
+        return;
+      }
+      const prevMonth = MONTHS[idx - 1];
+      const prevRecords = allRecords.filter(r => r.month === prevMonth);
+      if (prevRecords.length === 0) {
+        alert(`Tiada rekod ditemui pada bulan ${prevMonth}.`);
+        return;
+      }
+      if (!confirm(`Salin ${prevRecords.length} rekod dari bulan ${prevMonth} ke bulan ${currentMonth}?`)) return;
+
+      prevRecords.forEach(r => {
+        allRecords.push({
+          ...JSON.parse(JSON.stringify(r)),
+          id: 'AUD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+          month: currentMonth,
+          updatedAt: new Date().toISOString()
+        });
+      });
+      renderDashboard();
+      await syncToSheets();
+    }
+
+    function openNewFindingModal() {
+      document.getElementById('editId').value = '';
+      document.getElementById('inpFinding').value = '';
+      document.getElementById('inpDirective').value = '';
+      document.getElementById('inpJustification').value = '';
+      document.getElementById('inpImprovement').value = '';
+      document.getElementById('inpActionTaken').value = '';
+      document.getElementById('inpImpact').value = '';
+      document.getElementById('inpTraffic').value = 'RED';
+      document.getElementById('inpApproval').value = 'PENDING';
+      tempFilesPart3 = []; tempFilesPart4 = [];
+      renderFileLists();
+      document.querySelectorAll('.dept-cb').forEach(cb => cb.checked = false);
+      toggleRoleFields();
+      openModal('recordModal');
+    }
+
+    function openEditModal(id) {
+      const r = allRecords.find(x => x.id === id);
+      if (!r) return;
+      document.getElementById('editId').value = r.id;
+      document.getElementById('inpFinding').value = r.finding || '';
+      document.getElementById('inpDirective').value = r.directive || '';
+      document.getElementById('inpJustification').value = r.justification || '';
+      document.getElementById('inpImprovement').value = r.improvement || '';
+      document.getElementById('inpActionTaken').value = r.actionTaken || '';
+      document.getElementById('inpImpact').value = r.impact || '';
+      document.getElementById('inpTraffic').value = r.trafficLight || 'RED';
+      document.getElementById('inpApproval').value = r.approvalStatus || 'PENDING';
+      tempFilesPart3 = [...(r.filesPart3 || [])];
+      tempFilesPart4 = [...(r.filesPart4 || [])];
+      renderFileLists();
+      document.querySelectorAll('.dept-cb').forEach(cb => cb.checked = (r.departments || []).includes(cb.value));
+      toggleRoleFields();
+      openModal('recordModal');
+    }
+
+    function toggleRoleFields() {
+      const isDept = ROLE === 'dept';
+      document.getElementById('inpFinding').disabled = isDept;
+      document.getElementById('inpDirective').disabled = isDept;
+      document.querySelectorAll('.dept-cb').forEach(cb => cb.disabled = isDept);
+      document.getElementById('adminReviewSection').classList.toggle('hidden', isDept);
+    }
+
+    async function uploadEvidence(input, targetArray) {
+      const file = input.files[0];
+      if (!file) return;
+      setStatus(`Memuat naik ${file.name} ke Google Drive...`, 'amber');
+      const reader = new FileReader();
+      reader.onload = async function() {
+        const base64 = reader.result.split(',')[1];
+        const res = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'uploadFile',
+            fileName: file.name,
+            mimeType: file.type,
+            base64: base64
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          const item = { name: data.name, url: data.url };
+          if (targetArray === 'filesPart3') tempFilesPart3.push(item);
+          else tempFilesPart4.push(item);
+          renderFileLists();
+          setStatus('Fail berjaya dimuat naik ke Drive', 'emerald');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderFileLists() {
+      document.getElementById('listFilesPart3').innerHTML = tempFilesPart3.map(f => `<div>✅ <a href="${f.url}" target="_blank" class="underline">${f.name}</a></div>`).join('');
+      document.getElementById('listFilesPart4').innerHTML = tempFilesPart4.map(f => `<div>✅ <a href="${f.url}" target="_blank" class="underline">${f.name}</a></div>`).join('');
+    }
+
+    async function saveRecord() {
+      const id = document.getElementById('editId').value || 'AUD-' + Date.now();
+      const selectedDepts = Array.from(document.querySelectorAll('.dept-cb:checked')).map(cb => cb.value);
+      const record = {
+        id,
+        month: document.getElementById('filterMonth').value,
+        year: '2026',
+        departments: selectedDepts,
+        finding: document.getElementById('inpFinding').value,
+        directive: document.getElementById('inpDirective').value,
+        justification: document.getElementById('inpJustification').value,
+        improvement: document.getElementById('inpImprovement').value,
+        filesPart3: tempFilesPart3,
+        actionTaken: document.getElementById('inpActionTaken').value,
+        filesPart4: tempFilesPart4,
+        impact: document.getElementById('inpImpact').value,
+        trafficLight: document.getElementById('inpTraffic').value,
+        approvalStatus: ROLE === 'dept' ? 'PENDING' : document.getElementById('inpApproval').value,
+        updatedAt: new Date().toISOString()
+      };
+
+      const idx = allRecords.findIndex(x => x.id === id);
+      if (idx >= 0) allRecords[idx] = record;
+      else allRecords.push(record);
+
+      closeModal('recordModal');
+      renderDashboard();
+      await syncToSheets();
+    }
+
+    async function deleteRecord(id) {
+      if (!confirm('Padam rekod penemuan audit ini?')) return;
+      allRecords = allRecords.filter(x => x.id !== id);
+      renderDashboard();
+      await syncToSheets();
+    }
+
+    function openShareModal() {
+      generateShareUrl();
+      openModal('shareModal');
+    }
+
+    function generateShareUrl() {
+      const base = window.location.origin + window.location.pathname;
+      const d = encodeURIComponent(document.getElementById('shareDeptSelect').value);
+      const a = document.getElementById('shareAccessSelect').value;
+      document.getElementById('generatedUrl').value = `${base}?role=dept&dept=${d}&access=${a}`;
+    }
+
+    function copyShareUrl() {
+      const el = document.getElementById('generatedUrl');
+      el.select();
+      document.execCommand('copy');
+      alert('Pautan jabatan telah disalin!');
+    }
+
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); }
+
+    init();
+  </script>
+</body>
+</html>
