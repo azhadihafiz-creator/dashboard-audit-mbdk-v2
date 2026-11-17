@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="logo-mbdk.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
     .mbdk-red { background-color: #991b1b; }
@@ -17,7 +18,6 @@
 
   <!-- KONFIGURASI GOOGLE APPS SCRIPT -->
   <script>
-    // URL Web App Google Apps Script anda (Boleh tukar jika buat deployment baharu)
     const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyZplzgQ82Er2xjxBElA1QOVy33UXx7INVJpGDQDjWyTYC938JWbRW4bI5QAtO_y3DOHw/exec";
   </script>
 
@@ -35,73 +35,145 @@
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <span id="syncStatus" class="text-xs bg-red-950/80 px-3 py-1.5 rounded-full border border-red-700 flex items-center gap-1.5">
-          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Menyambung Pangkalan Data...
+          <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> Menyambung pangkalan data...
         </span>
         <button onclick="loadFromSheets()" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1 shadow transition">
-          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Muat Semula Data
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Muat Semula
         </button>
       </div>
     </div>
   </header>
 
-  <!-- BAR KAWALAN PERANAN & BULAN -->
-  <div class="bg-white border-b border-slate-200 shadow-sm">
+  <!-- NAVIGASI TAB UTAMA & PENAPIS MPA / JABATAN -->
+  <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- PENAPIS MPA & JABATAN -->
       <div class="flex flex-wrap items-center gap-2">
-        <label class="text-xs font-bold text-slate-600">BULAN:</label>
-        <select id="filterMonth" onchange="renderDashboard()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-medium bg-white">
-          <option value="Januari">Januari</option><option value="Februari">Februari</option>
-          <option value="Mac">Mac</option><option value="April">April</option>
-          <option value="Mei">Mei</option><option value="Jun">Jun</option>
-          <option value="Julai">Julai</option><option value="Ogos">Ogos</option>
-          <option value="September">September</option><option value="Oktober">Oktober</option>
-          <option value="November" selected>November</option><option value="Disember">Disember</option>
-        </select>
+        <label class="text-xs font-bold text-slate-600">MPA / TAHUN:</label>
+        <div class="flex items-center gap-1">
+          <input id="filterMpa" list="mpaList" onchange="renderAll()" placeholder="Contoh: MPA Bil. 1/2026" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-semibold bg-white w-48 focus:ring-2 focus:ring-red-700 focus:outline-none" />
+          <datalist id="mpaList"></datalist>
+        </div>
 
         <label class="text-xs font-bold text-slate-600 ml-1">JABATAN:</label>
-        <select id="filterDept" onchange="renderDashboard()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-medium max-w-xs bg-white">
+        <select id="filterDept" onchange="renderAll()" class="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm font-medium max-w-xs bg-white">
           <option value="ALL">Semua Jabatan (20 Jabatan MBDK)</option>
         </select>
       </div>
 
-      <div id="adminControls" class="flex flex-wrap items-center gap-2">
-        <button onclick="copyPreviousMonth()" class="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 transition">
-          <i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin Bulan Sebelum
+      <!-- BUTANG TUKAR PAPARAN (DASHBOARD VS PENGURUSAN ARAHAN) -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btnTabDashboard" onclick="switchView('dashboard')" class="bg-red-800 text-white text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow transition">
+          <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i> Paparan Dashboard
         </button>
-        <button onclick="openShareModal()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 transition">
-          <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Kongsi Pautan Jabatan
+        <button id="btnTabManage" onclick="switchView('manage')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition">
+          <i data-lucide="folder-kanban" class="w-3.5 h-3.5"></i> Urus Kertas Mesyuarat & Arahan
         </button>
-        <button onclick="openNewFindingModal()" class="bg-red-800 hover:bg-red-900 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow transition">
-          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Tambah Arahan Pengerusi Mesyuarat
+        <button id="btnShareAdmin" onclick="openShareModal()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 transition">
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i> Kongsi Pautan
         </button>
       </div>
     </div>
   </div>
 
   <!-- KANDUNGAN UTAMA -->
-  <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
-    <!-- KAD STATISTIK LAMPU ISYARAT -->
-    <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <p class="text-xs font-bold text-slate-500 uppercase">Jumlah Arahan</p>
-        <p id="statTotal" class="text-2xl font-extrabold text-slate-800 mt-1">0</p>
+  <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full">
+
+    <!-- ========================================================= -->
+    <!-- PAPARAN 1: DASHBOARD EKSEKUTIF, GRAF, JADUAL JABATAN & KAD -->
+    <!-- ========================================================= -->
+    <div id="viewDashboard" class="space-y-6">
+      <!-- KAD STATISTIK LAMPU ISYARAT -->
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs font-bold text-slate-500 uppercase">Jumlah Arahan Pengerusi</p>
+          <p id="statTotal" class="text-2xl font-extrabold text-slate-800 mt-1">0</p>
+        </div>
+        <div class="bg-red-50 p-4 rounded-xl border border-red-200 shadow-sm">
+          <p class="text-xs font-bold text-red-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-600"></span> Merah (Belum Laksana)</p>
+          <p id="statRed" class="text-2xl font-extrabold text-red-700 mt-1">0</p>
+        </div>
+        <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 shadow-sm">
+          <p class="text-xs font-bold text-amber-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Kuning (Dalam Pelaksanaan)</p>
+          <p id="statYellow" class="text-2xl font-extrabold text-amber-700 mt-1">0</p>
+        </div>
+        <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 shadow-sm">
+          <p class="text-xs font-bold text-emerald-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-600"></span> Hijau (Selesai Dilaksana)</p>
+          <p id="statGreen" class="text-2xl font-extrabold text-emerald-700 mt-1">0</p>
+        </div>
       </div>
-      <div class="bg-red-50 p-4 rounded-xl border border-red-200 shadow-sm">
-        <p class="text-xs font-bold text-red-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-600"></span> Merah (Belum Laksana)</p>
-        <p id="statRed" class="text-2xl font-extrabold text-red-700 mt-1">0</p>
+
+      <!-- GRAF STATUS & JADUAL PRESTASI MENGIKUT JABATAN -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- GRAF LAMPU ISYARAT -->
+        <div class="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Graf Status Pelaksanaan Arahan</h2>
+            <p class="text-xs text-slate-500 mb-4">Pecahan keseluruhan mengikut status lampu isyarat</p>
+          </div>
+          <div class="relative h-60 w-full flex items-center justify-center">
+            <canvas id="trafficChart"></canvas>
+          </div>
+        </div>
+
+        <!-- JADUAL STATUS SETIAP JABATAN -->
+        <div class="lg:col-span-7 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Jadual Status Mengikut Jabatan</h2>
+              <p class="text-xs text-slate-500">Klik nama jabatan untuk menapis senarai arahan di bawah</p>
+            </div>
+          </div>
+          <div class="overflow-y-auto max-h-64 border border-slate-200 rounded-lg">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-100 text-slate-700 font-bold sticky top-0 border-b">
+                <tr>
+                  <th class="py-2.5 px-3">Jabatan / Bahagian / Unit</th>
+                  <th class="py-2.5 px-2 text-center">Jumlah</th>
+                  <th class="py-2.5 px-2 text-center text-red-700">Merah</th>
+                  <th class="py-2.5 px-2 text-center text-amber-700">Kuning</th>
+                  <th class="py-2.5 px-2 text-center text-emerald-700">Hijau</th>
+                </tr>
+              </thead>
+              <tbody id="deptSummaryTable" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
-      <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 shadow-sm">
-        <p class="text-xs font-bold text-amber-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Kuning (Dalam Pelaksanaan)</p>
-        <p id="statYellow" class="text-2xl font-extrabold text-amber-700 mt-1">0</p>
-      </div>
-      <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 shadow-sm">
-        <p class="text-xs font-bold text-emerald-700 uppercase flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-600"></span> Hijau (Selesai Dilaksana)</p>
-        <p id="statGreen" class="text-2xl font-extrabold text-emerald-700 mt-1">0</p>
+
+      <!-- SENARAI PAPARAN ARAHAN & MAKLUMBALAS -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wide">Senarai Arahan Pengerusi Mesyuarat & Maklum Balas Jabatan</h2>
+          <span id="recordCountLabel" class="text-xs text-slate-500 font-medium"></span>
+        </div>
+        <div id="recordsContainer" class="space-y-4"></div>
       </div>
     </div>
 
-    <!-- SENARAI PENEMUAN & ARAHAN -->
-    <div id="recordsContainer" class="space-y-4"></div>
+    <!-- ========================================================= -->
+    <!-- PAPARAN 2: RUANG KHAS URUS KERTAS MESYUARAT & ARAHAN       -->
+    <!-- ========================================================= -->
+    <div id="viewManage" class="hidden space-y-6">
+      <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-base font-bold text-red-900">Pengurusan Kertas Mesyuarat & Arahan Pengerusi Mesyuarat</h2>
+          <p class="text-xs text-slate-600 mt-0.5">Langkah 1: Daftar <strong>Kertas Mesyuarat</strong> sekali sahaja. Langkah 2: Klik pada Kertas Mesyuarat tersebut untuk menambah beberapa <strong>Arahan Pengerusi Mesyuarat</strong> di bawahnya.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button onclick="copyPreviousMpa()" class="bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Salin Rekod Dari MPA Sebelumnya
+          </button>
+          <button onclick="openPaperModal()" class="bg-red-800 hover:bg-red-900 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-1.5 shadow transition">
+            <i data-lucide="file-plus" class="w-4 h-4"></i> + Daftar Kertas Mesyuarat Baharu
+          </button>
+        </div>
+      </div>
+
+      <!-- SENARAI KERTAS MESYUARAT BERKUMPUL -->
+      <div id="papersContainer" class="space-y-4"></div>
+    </div>
+
   </main>
 
   <!-- FOOTER RASMI -->
@@ -109,11 +181,38 @@
     Hak Cipta Terpelihara © 2026 • Aplikasi Dibangunkan & Dimiliki Oleh <strong class="text-white">Bahagian Audit Dalam, Majlis Bandaraya Diraja Klang (MBDK)</strong>
   </footer>
 
-  <!-- MODAL TAMBAH / KEMASKINI REKOD -->
+  <!-- ========================================================= -->
+  <!-- MODAL A: DAFTAR / EDIT KERTAS MESYUARAT (INDUK)           -->
+  <!-- ========================================================= -->
+  <div id="paperModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h3 class="text-base font-bold text-red-900">Daftar / Kemaskini Kertas Mesyuarat</h3>
+        <button onclick="closeModal('paperModal')" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <input type="hidden" id="editOldPaperTitle" />
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Bilangan / Tahun MPA:</label>
+        <input id="inpPaperMpa" type="text" placeholder="Contoh: MPA Bil. 1/2026" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-semibold" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 mb-1">Tajuk Kertas Mesyuarat:</label>
+        <textarea id="inpPaperTitle" rows="3" placeholder="Contoh: Kertas Bil. 1/2026 - Laporan Pengauditan Pengurusan Kutipan Hasil Sewaan Gerai MBDK" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t">
+        <button onclick="closeModal('paperModal')" class="px-4 py-2 text-xs font-semibold bg-slate-200 rounded-lg">Batal</button>
+        <button onclick="savePaperGroup()" class="px-4 py-2 text-xs font-semibold bg-red-800 text-white rounded-lg hover:bg-red-900">Simpan Kertas Mesyuarat</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL B: TAMBAH / KEMASKINI ARAHAN & MAKLUMBALAS          -->
+  <!-- ========================================================= -->
   <div id="recordModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-3">
-        <h2 id="modalTitle" class="text-lg font-bold text-red-900">Kemaskini Maklumbalas Audit</h2>
+        <h2 id="modalTitle" class="text-lg font-bold text-red-900">Kemaskini Arahan & Maklumbalas</h2>
         <button onclick="closeModal('recordModal')" class="text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
       </div>
 
@@ -121,39 +220,51 @@
 
       <!-- BAHAGIAN 1: URUSETIA -->
       <div class="bg-red-50/60 p-4 rounded-xl border border-red-200 space-y-3">
-        <h3 class="text-xs font-bold uppercase text-red-800">Bahagian 1: Kawalan Urusetia (Penemuan & Arahan Pengerusi)</h3>
+        <h3 class="text-xs font-bold uppercase text-red-800">Bahagian 1: Kertas Mesyuarat & Arahan Pengerusi (Kawalan Urusetia)</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-semibold mb-1">MPA / Tahun</label>
+            <input id="inpRecordMpa" type="text" class="w-full border rounded-lg p-2 text-sm font-semibold bg-white" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-xs font-semibold mb-1">Kertas Mesyuarat</label>
+            <input id="inpFinding" type="text" class="w-full border rounded-lg p-2 text-sm bg-white" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold mb-1">Arahan Pengerusi Mesyuarat (Tindakan Utama)</label>
+          <textarea id="inpDirective" rows="2" class="w-full border rounded-lg p-2 text-sm font-medium bg-white"></textarea>
+        </div>
         <div>
           <label class="block text-xs font-semibold mb-1">Pilih Jabatan Terlibat (20 Jabatan MBDK)</label>
           <div id="deptCheckboxes" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto bg-white p-2.5 rounded-lg border text-xs"></div>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold mb-1">Penemuan Audit</label>
-          <textarea id="inpFinding" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold mb-1">Arahan Pengerusi Mesyuarat</label>
-          <textarea id="inpDirective" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
         </div>
       </div>
 
       <!-- BAHAGIAN 2, 3, 4: JABATAN -->
       <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-        <h3 class="text-xs font-bold uppercase text-slate-700">Bahagian 2 - 4: Maklumbalas & Bukti Jabatan</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-xs font-bold uppercase text-slate-700">Bahagian 2 - 4: Maklumbalas & Lampiran Bukti Jabatan</h3>
+          <div class="flex items-center gap-1.5">
+            <label class="text-xs font-semibold text-slate-600">Tarikh Maklumbalas:</label>
+            <input type="date" id="inpFeedbackDate" class="border border-slate-300 rounded px-2 py-1 text-xs font-semibold bg-white" />
+          </div>
+        </div>
         <div>
           <label class="block text-xs font-semibold mb-1">2. Justifikasi Jabatan (Perkara Sebenar Berlaku)</label>
-          <textarea id="inpJustification" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+          <textarea id="inpJustification" rows="2" class="w-full border rounded-lg p-2 text-sm bg-white"></textarea>
         </div>
         <div>
           <label class="block text-xs font-semibold mb-1">3. Penambahbaikan Dibuat (Perancangan / ISO)</label>
-          <textarea id="inpImprovement" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+          <textarea id="inpImprovement" rows="2" class="w-full border rounded-lg p-2 text-sm bg-white"></textarea>
           <input type="file" id="filePart3" accept=".pdf,image/*" class="mt-1.5 text-xs" onchange="uploadEvidence(this, 'filesPart3')" />
-          <div id="listFilesPart3" class="text-xs text-blue-700 mt-1 space-y-1"></div>
+          <div id="listFilesPart3" class="text-xs mt-1.5 space-y-1"></div>
         </div>
         <div>
           <label class="block text-xs font-semibold mb-1">4. Tindakan Penambahbaikan (Borang Baharu / Pelaksanaan)</label>
-          <textarea id="inpActionTaken" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+          <textarea id="inpActionTaken" rows="2" class="w-full border rounded-lg p-2 text-sm bg-white"></textarea>
           <input type="file" id="filePart4" accept=".pdf,image/*" class="mt-1.5 text-xs" onchange="uploadEvidence(this, 'filesPart4')" />
-          <div id="listFilesPart4" class="text-xs text-blue-700 mt-1 space-y-1"></div>
+          <div id="listFilesPart4" class="text-xs mt-1.5 space-y-1"></div>
         </div>
       </div>
 
@@ -162,7 +273,7 @@
         <h3 class="text-xs font-bold uppercase text-amber-900">Bahagian 5: Penilaian Impak, Tapisan & Lampu Isyarat (Urusetia Sahaja)</h3>
         <div>
           <label class="block text-xs font-semibold mb-1">Impak Tindakan Penambahbaikan</label>
-          <textarea id="inpImpact" rows="2" class="w-full border rounded-lg p-2 text-sm"></textarea>
+          <textarea id="inpImpact" rows="2" class="w-full border rounded-lg p-2 text-sm bg-white"></textarea>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -186,12 +297,14 @@
 
       <div class="flex justify-end gap-2 pt-3 border-t">
         <button onclick="closeModal('recordModal')" class="px-4 py-2 text-xs font-semibold bg-slate-200 rounded-lg">Batal</button>
-        <button onclick="saveRecord()" class="px-4 py-2 text-xs font-semibold bg-red-800 text-white rounded-lg hover:bg-red-900">Simpan Ke Google Sheet</button>
+        <button onclick="saveRecord()" class="px-4 py-2 text-xs font-semibold bg-red-800 text-white rounded-lg hover:bg-red-900">Simpan Maklumbalas</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL KONGSI PAUTAN JABATAN -->
+  <!-- ========================================================= -->
+  <!-- MODAL C: KONGSI PAUTAN KHAS JABATAN                       -->
+  <!-- ========================================================= -->
   <div id="shareModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center p-4 z-50">
     <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
       <h2 class="text-base font-bold text-red-900">Jana Pautan Khas Jabatan MBDK</h2>
@@ -218,7 +331,6 @@
   </div>
 
   <script>
-    const MONTHS = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];
     const DEPARTMENTS = [
       "Jabatan Khidmat Pengurusan", "Jabatan Kewangan", "Jabatan Kejuruteraan",
       "Jabatan Perancang Bandar", "Jabatan Bangunan", "Jabatan Penilaian dan Pengurusan Harta",
@@ -237,6 +349,19 @@
     let allRecords = [];
     let tempFilesPart3 = [];
     let tempFilesPart4 = [];
+    let trafficChartInstance = null;
+
+    function getTodayISO() {
+      const now = new Date();
+      return now.toISOString().split('T')[0];
+    }
+
+    function formatDisplayDate(isoStr) {
+      if (!isoStr) return '';
+      const parts = isoStr.split('-');
+      if (parts.length !== 3) return isoStr;
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
 
     function init() {
       lucide.createIcons();
@@ -250,8 +375,12 @@
         checkboxes.innerHTML += `<label class="flex items-center gap-1.5"><input type="checkbox" value="${d}" class="dept-cb"> <span>${d}</span></label>`;
       });
 
+      // Tetapkan nilai lalai MPA / Tahun
+      document.getElementById('filterMpa').value = "MPA Bil. 1/2026";
+
       if (ROLE === 'dept') {
-        document.getElementById('adminControls').classList.add('hidden');
+        document.getElementById('btnTabManage').classList.add('hidden');
+        document.getElementById('btnShareAdmin').classList.add('hidden');
         if (TARGET_DEPT) {
           filterDept.value = TARGET_DEPT;
           filterDept.disabled = true;
@@ -260,31 +389,53 @@
       loadFromSheets();
     }
 
+    function switchView(viewName) {
+      const dash = document.getElementById('viewDashboard');
+      const manage = document.getElementById('viewManage');
+      const btnDash = document.getElementById('btnTabDashboard');
+      const btnManage = document.getElementById('btnTabManage');
+
+      if (viewName === 'dashboard') {
+        dash.classList.remove('hidden');
+        manage.classList.add('hidden');
+        btnDash.className = "bg-red-800 text-white text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow transition";
+        btnManage.className = "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition";
+      } else {
+        dash.classList.add('hidden');
+        manage.classList.remove('hidden');
+        btnManage.className = "bg-red-800 text-white text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow transition";
+        btnDash.className = "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition";
+      }
+      renderAll();
+    }
+
     async function loadFromSheets() {
-      setStatus('Memuatkan data dari Google Sheet...', 'amber');
+      setStatus('Memuatkan data...', 'amber');
       try {
         const res = await fetch(GAS_WEB_APP_URL);
         const data = await res.json();
         if (data.status === 'success') {
           allRecords = data.records || [];
-          renderDashboard();
-          setStatus('Bersambung ke Google Sheet', 'emerald');
+          updateMpaDatalist();
+          renderAll();
+          setStatus('Data dikemaskini', 'emerald');
         }
       } catch (e) {
-        setStatus('Gagal sambung Google Sheet (Semak URL)', 'red');
+        setStatus('Gagal memuatkan data', 'red');
       }
     }
 
     async function syncToSheets() {
-      setStatus('Menyimpan ke Google Sheet...', 'amber');
+      setStatus('Menyimpan data...', 'amber');
       try {
         await fetch(GAS_WEB_APP_URL, {
           method: 'POST',
           body: JSON.stringify({ action: 'saveAll', records: allRecords })
         });
-        setStatus('Data Disimpan ke Google Sheet', 'emerald');
+        updateMpaDatalist();
+        setStatus('Telah disimpan', 'emerald');
       } catch (e) {
-        setStatus('Ralat semasa menyimpan data', 'red');
+        setStatus('Ralat semasa menyimpan', 'red');
       }
     }
 
@@ -293,24 +444,55 @@
       el.innerHTML = `<span class="w-2 h-2 rounded-full bg-${color}-400"></span> ${text}`;
     }
 
-    function renderDashboard() {
-      const month = document.getElementById('filterMonth').value;
-      const dept = document.getElementById('filterDept').value;
-      const container = document.getElementById('recordsContainer');
+    function updateMpaDatalist() {
+      const mpas = [...new Set(allRecords.map(r => r.month).filter(Boolean))];
+      if (!mpas.includes("MPA Bil. 1/2026")) mpas.unshift("MPA Bil. 1/2026");
+      const datalist = document.getElementById('mpaList');
+      datalist.innerHTML = mpas.map(m => `<option value="${m}">`).join('');
+    }
 
-      let filtered = allRecords.filter(r => r.month === month);
-      if (dept !== 'ALL') filtered = filtered.filter(r => (r.departments || []).includes(dept));
+    function renderAll() {
+      renderDashboard();
+      renderManagePapers();
+      lucide.createIcons();
+    }
+
+    function getFilteredRecords() {
+      const mpa = document.getElementById('filterMpa').value.trim();
+      const dept = document.getElementById('filterDept').value;
+
+      // Hanya ambil rekod arahan sebenar (bukan placeholder kertas mesyuarat kosong)
+      let filtered = allRecords.filter(r => r.directive && r.directive !== '__PAPER_PLACEHOLDER__');
+      if (mpa) {
+        filtered = filtered.filter(r => (r.month || '').toLowerCase() === mpa.toLowerCase());
+      }
+      if (dept !== 'ALL') {
+        filtered = filtered.filter(r => (r.departments || []).includes(dept));
+      }
       if (ROLE === 'dept' && ACCESS_MODE === 'view') {
         filtered = filtered.filter(r => r.approvalStatus === 'APPROVED');
       }
+      return filtered;
+    }
+
+    function renderDashboard() {
+      const filtered = getFilteredRecords();
+      const redCount = filtered.filter(r => r.trafficLight === 'RED').length;
+      const yellowCount = filtered.filter(r => r.trafficLight === 'YELLOW').length;
+      const greenCount = filtered.filter(r => r.trafficLight === 'GREEN').length;
 
       document.getElementById('statTotal').innerText = filtered.length;
-      document.getElementById('statRed').innerText = filtered.filter(r => r.trafficLight === 'RED').length;
-      document.getElementById('statYellow').innerText = filtered.filter(r => r.trafficLight === 'YELLOW').length;
-      document.getElementById('statGreen').innerText = filtered.filter(r => r.trafficLight === 'GREEN').length;
+      document.getElementById('statRed').innerText = redCount;
+      document.getElementById('statYellow').innerText = yellowCount;
+      document.getElementById('statGreen').innerText = greenCount;
+      document.getElementById('recordCountLabel').innerText = `Memaparkan ${filtered.length} arahan`;
 
+      renderChart(redCount, yellowCount, greenCount);
+      renderDeptSummaryTable();
+
+      const container = document.getElementById('recordsContainer');
       if (filtered.length === 0) {
-        container.innerHTML = `<div class="bg-white p-8 rounded-xl border text-center text-slate-500 text-sm">Tiada rekod arahan audit ditemui untuk tapisan semasa.</div>`;
+        container.innerHTML = `<div class="bg-white p-8 rounded-xl border text-center text-slate-500 text-sm">Tiada rekod arahan pengerusi mesyuarat ditemui untuk MPA / tapisan ini.</div>`;
         return;
       }
 
@@ -321,23 +503,36 @@
         const label = r.trafficLight === 'GREEN' ? '🟢 HIJAU (SELESAI)' :
                       r.trafficLight === 'YELLOW' ? '🟡 KUNING (DALAM PELAKSANAAN)' : '🔴 MERAH (BELUM LAKSANA)';
         const canEdit = ROLE === 'admin' || (ROLE === 'dept' && ACCESS_MODE === 'draft');
+        const dateBadge = r.adminNote ? `<span class="inline-flex items-center gap-1 text-[11px] bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded font-medium">📅 Dijawab: ${formatDisplayDate(r.adminNote)}</span>` : '';
 
         return `
-          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
-            <div class="flex flex-wrap justify-between items-start gap-2 border-b pb-3">
-              <div>
-                <div class="flex flex-wrap gap-1 mb-1">
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3 hover:border-slate-300 transition">
+            <div class="flex flex-wrap justify-between items-start gap-3 border-b pb-3">
+              <div class="space-y-1.5 max-w-4xl">
+                <!-- KERTAS MESYUARAT (LEBIH KECIL DI ATAS) -->
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    📄 ${r.finding || 'Tiada Kertas Mesyuarat'}
+                  </span>
+                  ${dateBadge}
+                </div>
+                <!-- ARAHAN PENGERUSI MESYUARAT (LEBIH BESAR & TEBAL) -->
+                <h3 class="text-base md:text-lg font-extrabold text-slate-900 leading-snug">
+                  ${r.directive}
+                </h3>
+                <!-- SENARAI JABATAN TERLIBAT -->
+                <div class="flex flex-wrap gap-1 pt-0.5">
                   ${(r.departments || []).map(d => `<span class="bg-red-50 text-red-800 border border-red-200 text-[11px] font-semibold px-2 py-0.5 rounded">${d}</span>`).join('')}
                 </div>
-                <h3 class="font-bold text-slate-900 text-sm">${r.finding}</h3>
-                <p class="text-xs text-slate-600 mt-0.5"><strong>Arahan Pengerusi:</strong> ${r.directive}</p>
               </div>
+
               <div class="flex items-center gap-2">
                 <span class="text-xs font-bold px-2.5 py-1 rounded-full border ${badge}">${label}</span>
-                ${canEdit ? `<button onclick="openEditModal('${r.id}')" class="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-slate-900">Kemaskini</button>` : ''}
-                ${ROLE === 'admin' ? `<button onclick="deleteRecord('${r.id}')" class="bg-red-100 text-red-700 text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-200">Padam</button>` : ''}
+                ${canEdit ? `<button onclick="openEditModal('${r.id}')" class="bg-slate-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-slate-900">Kemaskini</button>` : ''}
+                ${ROLE === 'admin' ? `<button onclick="deleteRecord('${r.id}')" class="bg-red-100 text-red-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-red-200">Padam</button>` : ''}
               </div>
             </div>
+
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
               <div class="bg-slate-50 p-3 rounded-lg">
                 <p class="font-bold text-slate-700 mb-1">Justifikasi Jabatan</p>
@@ -346,14 +541,14 @@
               <div class="bg-slate-50 p-3 rounded-lg">
                 <p class="font-bold text-slate-700 mb-1">Penambahbaikan & Tindakan</p>
                 <p class="text-slate-600">${r.improvement || '-'} / ${r.actionTaken || '-'}</p>
-                <div class="mt-1 space-y-0.5">
-                  ${[...(r.filesPart3 || []), ...(r.filesPart4 || [])].map(f => `<a href="${f.url}" target="_blank" class="block text-blue-600 underline">📎 ${f.name}</a>`).join('')}
+                <div class="mt-1.5 space-y-1">
+                  ${[...(r.filesPart3 || []), ...(r.filesPart4 || [])].map(f => `<a href="${f.url}" target="_blank" class="block text-blue-600 hover:underline font-medium">📎 ${f.name}</a>`).join('')}
                 </div>
               </div>
               <div class="bg-amber-50/60 p-3 rounded-lg border border-amber-100">
                 <p class="font-bold text-amber-900 mb-1">Penilaian Impak Urusetia</p>
                 <p class="text-slate-700">${r.impact || 'Belum dinilai'}</p>
-                <p class="mt-1 text-[11px] font-semibold text-slate-500">Status Tapisan: ${r.approvalStatus || 'PENDING'}</p>
+                <p class="mt-1 text-[11px] font-semibold text-slate-500">Tapisan: ${r.approvalStatus || 'PENDING'}</p>
               </div>
             </div>
           </div>
@@ -361,44 +556,204 @@
       }).join('');
     }
 
-    async function copyPreviousMonth() {
-      const currentMonth = document.getElementById('filterMonth').value;
-      const idx = MONTHS.indexOf(currentMonth);
-      if (idx <= 0) {
-        alert('Bulan Januari tiada bulan sebelumnya dalam tahun ini.');
-        return;
-      }
-      const prevMonth = MONTHS[idx - 1];
-      const prevRecords = allRecords.filter(r => r.month === prevMonth);
-      if (prevRecords.length === 0) {
-        alert(`Tiada rekod ditemui pada bulan ${prevMonth}.`);
-        return;
-      }
-      if (!confirm(`Salin ${prevRecords.length} rekod dari bulan ${prevMonth} ke bulan ${currentMonth}?`)) return;
+    function renderChart(red, yellow, green) {
+      const ctx = document.getElementById('trafficChart').getContext('2d');
+      if (trafficChartInstance) trafficChartInstance.destroy();
 
-      prevRecords.forEach(r => {
+      const total = red + yellow + green;
+      trafficChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Merah (Belum Laksana)', 'Kuning (Dalam Pelaksanaan)', 'Hijau (Selesai)'],
+          datasets: [{
+            data: total === 0 ? [0, 0, 0] : [red, yellow, green],
+            backgroundColor: ['#dc2626', '#f59e0b', '#10b981'],
+            borderWidth: 2,
+            borderColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    function renderDeptSummaryTable() {
+      const mpa = document.getElementById('filterMpa').value.trim();
+      let mpaRecords = allRecords.filter(r => r.directive && r.directive !== '__PAPER_PLACEHOLDER__');
+      if (mpa) {
+        mpaRecords = mpaRecords.filter(r => (r.month || '').toLowerCase() === mpa.toLowerCase());
+      }
+      if (ROLE === 'dept' && ACCESS_MODE === 'view') {
+        mpaRecords = mpaRecords.filter(r => r.approvalStatus === 'APPROVED');
+      }
+
+      const tbody = document.getElementById('deptSummaryTable');
+      tbody.innerHTML = DEPARTMENTS.map(dept => {
+        const deptRecs = mpaRecords.filter(r => (r.departments || []).includes(dept));
+        const rCount = deptRecs.filter(r => r.trafficLight === 'RED').length;
+        const yCount = deptRecs.filter(r => r.trafficLight === 'YELLOW').length;
+        const gCount = deptRecs.filter(r => r.trafficLight === 'GREEN').length;
+
+        return `
+          <tr onclick="filterByDeptRow('${dept}')" class="hover:bg-red-50/50 cursor-pointer transition">
+            <td class="py-2 px-3 font-medium text-slate-800">${dept}</td>
+            <td class="py-2 px-2 text-center font-bold">${deptRecs.length}</td>
+            <td class="py-2 px-2 text-center font-bold text-red-600">${rCount}</td>
+            <td class="py-2 px-2 text-center font-bold text-amber-600">${yCount}</td>
+            <td class="py-2 px-2 text-center font-bold text-emerald-600">${gCount}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterByDeptRow(deptName) {
+      if (ROLE === 'dept' && TARGET_DEPT) return;
+      const sel = document.getElementById('filterDept');
+      sel.value = (sel.value === deptName) ? 'ALL' : deptName;
+      renderAll();
+    }
+
+    // =========================================================
+    // PENGURUSAN KERTAS MESYUARAT & ARAHAN (PAPARAN 2)
+    // =========================================================
+    function renderManagePapers() {
+      const mpa = document.getElementById('filterMpa').value.trim();
+      const container = document.getElementById('papersContainer');
+
+      let mpaRecords = allRecords;
+      if (mpa) {
+        mpaRecords = mpaRecords.filter(r => (r.month || '').toLowerCase() === mpa.toLowerCase());
+      }
+
+      // Kumpulkan mengikut tajuk Kertas Mesyuarat (finding)
+      const groups = {};
+      mpaRecords.forEach(r => {
+        const title = r.finding || 'Kertas Mesyuarat Umum';
+        if (!groups[title]) groups[title] = [];
+        if (r.directive && r.directive !== '__PAPER_PLACEHOLDER__') {
+          groups[title].push(r);
+        }
+      });
+
+      const titles = Object.keys(groups);
+      if (titles.length === 0) {
+        container.innerHTML = `<div class="bg-white p-8 rounded-xl border text-center text-slate-500 text-sm">Belum ada Kertas Mesyuarat didaftarkan bagi <strong>${mpa || 'MPA ini'}</strong>. Klik butang <strong>+ Daftar Kertas Mesyuarat Baharu</strong> di atas.</div>`;
+        return;
+      }
+
+      container.innerHTML = titles.map(title => {
+        const items = groups[title];
+        const safeTitle = title.replace(/'/g, "\'");
+        return `
+          <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="bg-slate-900 text-white p-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span class="text-[11px] uppercase tracking-wider text-amber-300 font-bold">Kertas Mesyuarat (${mpa})</span>
+                <h3 class="text-sm md:text-base font-bold mt-0.5">${title}</h3>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="openPaperModal('${safeTitle}')" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-3 py-1.5 rounded-lg">Edit Tajuk</button>
+                <button onclick="openAddDirectiveForPaper('${safeTitle}')" class="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1 shadow">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah Arahan Pengerusi
+                </button>
+              </div>
+            </div>
+
+            <div class="divide-y divide-slate-200">
+              ${items.length === 0 ? `<p class="p-4 text-xs text-slate-500 italic">Tiada arahan ditambah di bawah kertas mesyuarat ini lagi.</p>` :
+                items.map((item, idx) => `
+                  <div class="p-4 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50">
+                    <div class="space-y-1 max-w-3xl">
+                      <p class="text-sm font-bold text-slate-900">${idx + 1}. ${item.directive}</p>
+                      <div class="flex flex-wrap gap-1">
+                        ${(item.departments || []).map(d => `<span class="bg-red-50 text-red-800 border border-red-200 text-[10px] font-semibold px-2 py-0.5 rounded">${d}</span>`).join('')}
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button onclick="openEditModal('${item.id}')" class="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-slate-900">Edit Arahan</button>
+                      <button onclick="deleteRecord('${item.id}')" class="bg-red-100 text-red-700 text-xs px-2.5 py-1.5 rounded-lg hover:bg-red-200">Padam</button>
+                    </div>
+                  </div>
+                `).join('')
+              }
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openPaperModal(existingTitle = '') {
+      document.getElementById('editOldPaperTitle').value = existingTitle;
+      document.getElementById('inpPaperMpa').value = document.getElementById('filterMpa').value || 'MPA Bil. 1/2026';
+      document.getElementById('inpPaperTitle').value = existingTitle;
+      openModal('paperModal');
+    }
+
+    async function savePaperGroup() {
+      const oldTitle = document.getElementById('editOldPaperTitle').value.trim();
+      const newMpa = document.getElementById('inpPaperMpa').value.trim();
+      const newTitle = document.getElementById('inpPaperTitle').value.trim();
+
+      if (!newMpa || !newTitle) {
+        alert('Sila lengkapkan MPA/Tahun dan Tajuk Kertas Mesyuarat.');
+        return;
+      }
+
+      document.getElementById('filterMpa').value = newMpa;
+
+      if (oldTitle) {
+        allRecords.forEach(r => {
+          if (r.finding === oldTitle) {
+            r.finding = newTitle;
+            r.month = newMpa;
+          }
+        });
+      } else {
         allRecords.push({
-          ...JSON.parse(JSON.stringify(r)),
-          id: 'AUD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-          month: currentMonth,
+          id: 'PAPER-' + Date.now(),
+          month: newMpa,
+          year: '2026',
+          departments: [],
+          finding: newTitle,
+          directive: '__PAPER_PLACEHOLDER__',
+          justification: '',
+          improvement: '',
+          filesPart3: [],
+          actionTaken: '',
+          filesPart4: [],
+          impact: '',
+          trafficLight: 'RED',
+          approvalStatus: 'PENDING',
+          adminNote: '',
           updatedAt: new Date().toISOString()
         });
-      });
-      renderDashboard();
+      }
+
+      closeModal('paperModal');
+      renderAll();
       await syncToSheets();
     }
 
-    function openNewFindingModal() {
+    function openAddDirectiveForPaper(paperTitle) {
+      const currentMpa = document.getElementById('filterMpa').value || 'MPA Bil. 1/2026';
       document.getElementById('editId').value = '';
-      document.getElementById('inpFinding').value = '';
+      document.getElementById('inpRecordMpa').value = currentMpa;
+      document.getElementById('inpFinding').value = paperTitle;
       document.getElementById('inpDirective').value = '';
+      document.getElementById('inpFeedbackDate').value = '';
       document.getElementById('inpJustification').value = '';
       document.getElementById('inpImprovement').value = '';
       document.getElementById('inpActionTaken').value = '';
       document.getElementById('inpImpact').value = '';
       document.getElementById('inpTraffic').value = 'RED';
       document.getElementById('inpApproval').value = 'PENDING';
-      tempFilesPart3 = []; tempFilesPart4 = [];
+      tempFilesPart3 = [];
+      tempFilesPart4 = [];
       renderFileLists();
       document.querySelectorAll('.dept-cb').forEach(cb => cb.checked = false);
       toggleRoleFields();
@@ -409,8 +764,11 @@
       const r = allRecords.find(x => x.id === id);
       if (!r) return;
       document.getElementById('editId').value = r.id;
+      document.getElementById('inpRecordMpa').value = r.month || '';
       document.getElementById('inpFinding').value = r.finding || '';
       document.getElementById('inpDirective').value = r.directive || '';
+      // Auto isi tarikh semasa jika jabatan membuka borang dan tarikh belum diisi
+      document.getElementById('inpFeedbackDate').value = r.adminNote || (ROLE === 'dept' ? getTodayISO() : '');
       document.getElementById('inpJustification').value = r.justification || '';
       document.getElementById('inpImprovement').value = r.improvement || '';
       document.getElementById('inpActionTaken').value = r.actionTaken || '';
@@ -427,6 +785,7 @@
 
     function toggleRoleFields() {
       const isDept = ROLE === 'dept';
+      document.getElementById('inpRecordMpa').disabled = isDept;
       document.getElementById('inpFinding').disabled = isDept;
       document.getElementById('inpDirective').disabled = isDept;
       document.querySelectorAll('.dept-cb').forEach(cb => cb.disabled = isDept);
@@ -436,46 +795,90 @@
     async function uploadEvidence(input, targetArray) {
       const file = input.files[0];
       if (!file) return;
-      setStatus(`Memuat naik ${file.name} ke Google Drive...`, 'amber');
+      setStatus(`Memuat naik ${file.name}...`, 'amber');
       const reader = new FileReader();
       reader.onload = async function() {
         const base64 = reader.result.split(',')[1];
-        const res = await fetch(GAS_WEB_APP_URL, {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'uploadFile',
-            fileName: file.name,
-            mimeType: file.type,
-            base64: base64
-          })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-          const item = { name: data.name, url: data.url };
-          if (targetArray === 'filesPart3') tempFilesPart3.push(item);
-          else tempFilesPart4.push(item);
-          renderFileLists();
-          setStatus('Fail berjaya dimuat naik ke Drive', 'emerald');
+        try {
+          const res = await fetch(GAS_WEB_APP_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'uploadFile',
+              fileName: file.name,
+              mimeType: file.type,
+              base64: base64
+            })
+          });
+          const data = await res.json();
+          if (data.status === 'success') {
+            const item = { name: data.name, url: data.url };
+            if (targetArray === 'filesPart3') tempFilesPart3.push(item);
+            else tempFilesPart4.push(item);
+            renderFileLists();
+            input.value = '';
+            setStatus('Fail berjaya dimuat naik', 'emerald');
+          }
+        } catch (err) {
+          setStatus('Gagal memuat naik fail', 'red');
         }
       };
       reader.readAsDataURL(file);
     }
 
+    function removeAttachment(targetArray, index) {
+      if (!confirm('Padam lampiran ini?')) return;
+      if (targetArray === 'filesPart3') {
+        tempFilesPart3.splice(index, 1);
+      } else {
+        tempFilesPart4.splice(index, 1);
+      }
+      renderFileLists();
+    }
+
     function renderFileLists() {
-      document.getElementById('listFilesPart3').innerHTML = tempFilesPart3.map(f => `<div>✅ <a href="${f.url}" target="_blank" class="underline">${f.name}</a></div>`).join('');
-      document.getElementById('listFilesPart4').innerHTML = tempFilesPart4.map(f => `<div>✅ <a href="${f.url}" target="_blank" class="underline">${f.name}</a></div>`).join('');
+      document.getElementById('listFilesPart3').innerHTML = tempFilesPart3.map((f, i) => `
+        <div class="flex items-center justify-between bg-white px-2.5 py-1.5 rounded border border-slate-200">
+          <a href="${f.url}" target="_blank" class="text-blue-700 underline truncate max-w-md">✅ ${f.name}</a>
+          <button type="button" onclick="removeAttachment('filesPart3', ${i})" class="text-red-600 hover:text-red-800 font-bold text-xs px-2 py-0.5 rounded bg-red-50">Padam</button>
+        </div>
+      `).join('');
+
+      document.getElementById('listFilesPart4').innerHTML = tempFilesPart4.map((f, i) => `
+        <div class="flex items-center justify-between bg-white px-2.5 py-1.5 rounded border border-slate-200">
+          <a href="${f.url}" target="_blank" class="text-blue-700 underline truncate max-w-md">✅ ${f.name}</a>
+          <button type="button" onclick="removeAttachment('filesPart4', ${i})" class="text-red-600 hover:text-red-800 font-bold text-xs px-2 py-0.5 rounded bg-red-50">Padam</button>
+        </div>
+      `).join('');
     }
 
     async function saveRecord() {
       const id = document.getElementById('editId').value || 'AUD-' + Date.now();
       const selectedDepts = Array.from(document.querySelectorAll('.dept-cb:checked')).map(cb => cb.value);
+      const mpaVal = document.getElementById('inpRecordMpa').value.trim();
+      const paperTitle = document.getElementById('inpFinding').value.trim();
+      const directiveVal = document.getElementById('inpDirective').value.trim();
+
+      if (!directiveVal) {
+        alert('Sila isi Arahan Pengerusi Mesyuarat.');
+        return;
+      }
+
+      // Auto isi tarikh semasa jika maklumbalas diisi tetapi tarikh masih kosong
+      let fbDate = document.getElementById('inpFeedbackDate').value;
+      const hasFeedback = document.getElementById('inpJustification').value.trim() ||
+                          document.getElementById('inpImprovement').value.trim() ||
+                          document.getElementById('inpActionTaken').value.trim();
+      if (hasFeedback && !fbDate) {
+        fbDate = getTodayISO();
+      }
+
       const record = {
         id,
-        month: document.getElementById('filterMonth').value,
+        month: mpaVal,
         year: '2026',
         departments: selectedDepts,
-        finding: document.getElementById('inpFinding').value,
-        directive: document.getElementById('inpDirective').value,
+        finding: paperTitle,
+        directive: directiveVal,
         justification: document.getElementById('inpJustification').value,
         improvement: document.getElementById('inpImprovement').value,
         filesPart3: tempFilesPart3,
@@ -484,22 +887,51 @@
         impact: document.getElementById('inpImpact').value,
         trafficLight: document.getElementById('inpTraffic').value,
         approvalStatus: ROLE === 'dept' ? 'PENDING' : document.getElementById('inpApproval').value,
+        adminNote: fbDate,
         updatedAt: new Date().toISOString()
       };
+
+      // Buang placeholder kertas mesyuarat jika sudah ada arahan sebenar di bawahnya
+      allRecords = allRecords.filter(x => !(x.directive === '__PAPER_PLACEHOLDER__' && x.finding === paperTitle && x.month === mpaVal));
 
       const idx = allRecords.findIndex(x => x.id === id);
       if (idx >= 0) allRecords[idx] = record;
       else allRecords.push(record);
 
       closeModal('recordModal');
-      renderDashboard();
+      renderAll();
       await syncToSheets();
     }
 
     async function deleteRecord(id) {
-      if (!confirm('Padam rekod penemuan audit ini?')) return;
+      if (!confirm('Padam rekod arahan ini?')) return;
       allRecords = allRecords.filter(x => x.id !== id);
-      renderDashboard();
+      renderAll();
+      await syncToSheets();
+    }
+
+    async function copyPreviousMpa() {
+      const targetMpa = document.getElementById('filterMpa').value.trim();
+      const sourceMpa = prompt('Masukkan nama MPA / Tahun sumber yang ingin disalin (Contoh: MPA Bil. 1/2026):');
+      if (!sourceMpa) return;
+
+      const sourceRecords = allRecords.filter(r => (r.month || '').toLowerCase() === sourceMpa.trim().toLowerCase() && r.directive !== '__PAPER_PLACEHOLDER__');
+      if (sourceRecords.length === 0) {
+        alert(`Tiada rekod ditemui bagi "${sourceMpa}".`);
+        return;
+      }
+      if (!confirm(`Salin ${sourceRecords.length} arahan dari "${sourceMpa}" ke "${targetMpa}"?`)) return;
+
+      sourceRecords.forEach(r => {
+        allRecords.push({
+          ...JSON.parse(JSON.stringify(r)),
+          id: 'AUD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+          month: targetMpa,
+          updatedAt: new Date().toISOString()
+        });
+      });
+
+      renderAll();
       await syncToSheets();
     }
 
